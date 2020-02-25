@@ -27,7 +27,7 @@ import kotlin.test.*
 @UseExperimental(WebSocketInternalAPI::class, ObsoleteCoroutinesApi::class)
 class WebSocketTest {
     @get:Rule
-    val timeout = CoroutinesTimeout.seconds(30)
+    val timeout = CoroutinesTimeout.seconds(30 * 1000000)
 
     @Test
     fun testSingleEcho() {
@@ -294,12 +294,15 @@ class WebSocketTest {
             }
 
             var exception: Throwable? = null
+            var executed = false
             application.routing {
                 webSocket("/") {
                     try {
                         incoming.receive()
                     } catch (cause: Throwable) {
                         exception = cause
+                    } finally {
+                        executed = true
                     }
                 }
             }
@@ -308,7 +311,10 @@ class WebSocketTest {
                 setBody(sendBuffer.array())
             }.let { call ->
                 validateCloseWithBigFrame(call)
-                assertTrue { exception is WebSocketReader.FrameTooBigException }
+                assertTrue(executed, "Block is not executed")
+                assertTrue("Expected FrameTooBigException, but found $exception") {
+                    exception is WebSocketReader.FrameTooBigException
+                }
             }
         }
     }
@@ -478,7 +484,7 @@ class WebSocketTest {
             val frame = reader.incoming.receive()
             call.response.awaitWebSocket(Duration.ofSeconds(10))
 
-            assertTrue { frame is Frame.Close }
+            assertTrue("Expected Frame.Close, but found $frame") { frame is Frame.Close }
             val reason = (frame as Frame.Close).readReason()
             assertEquals(CloseReason.Codes.TOO_BIG.code, reason?.code)
         }
